@@ -3,9 +3,10 @@ const
 
 
 
-const login = (req, res) => {
+
+module.exports.auth = (req, res) => {
 	db.find('users', req.body).then(data => {
-		if (data.length == 0) {
+		if (data.length === 0) {
 			res.end(JSON.stringify({
 				code: 1,
 				msg: 'Incorrect username or password.' 
@@ -18,10 +19,4 @@ const login = (req, res) => {
 	}).then(err => {
 		res.end(JSON.stringify(err))
 	})
-}
-
-
-
-module.exports = {
-	login: login
 }

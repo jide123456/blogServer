@@ -1,13 +1,13 @@
 // initialize
-require('../module/cache')().init()
+require('../module/cache')()
 
 
 
 const 
 	express = require('express'),
 	articles = require('./articles'),
-	classes = require('./classes'),
-	api = require('./api'),
+	category = require('./category'),
+	login = require('./login'),
 	
 	resourceRouter = express.Router(),
 	apiRouter = express.Router()
@@ -22,10 +22,10 @@ const
 // /resource/articles/13     post        update one article by id         true
 // /resource/articles/13     delete      delete one article by id         true
 
-// /resource/classes         get         get all classes                  false
-// /resource/classes         put         create new class                 true
-// /resource/classes/13      post        update class by id               true
-// /resource/classes/13      delete      delete class by id               true
+// /resource/category         get         get all category                  false
+// /resource/category         put         create new class                 true
+// /resource/category/13      post        update class by id               true
+// /resource/category/13      delete      delete class by id               true
 
 // /login                    post        login
 
@@ -50,26 +50,26 @@ resourceRouter.use((req, res, next) => {
 	next()
 })
 
-// /resource/articles
-resourceRouter.get('/articles', articles.get)
-resourceRouter.put('/articles', articles.put)
+// /resource/article
+resourceRouter.get('/article', articles.get)
+resourceRouter.put('/article', articles.put)
 
-// /resource/articles/:id
-resourceRouter.get('/articles/:id', articles.getOne)
-resourceRouter.post('/articles/:id', articles.post)
-resourceRouter.delete('/articles/:id', articles.delete)
+// /resource/article/:id
+resourceRouter.get('/article/:id', articles.getOne)
+resourceRouter.post('/article/:id', articles.post)
+resourceRouter.delete('/article/:id', articles.delete)
 
-// /resource/classes
-resourceRouter.get('/classes', classes.get)
-resourceRouter.put('/classes', classes.put)
+// /resource/category
+resourceRouter.get('/category', category.get)
+resourceRouter.put('/category', category.put)
 
-// /resource/classes/:id
-resourceRouter.post('/classes/:id', classes.post)
+// /resource/category/:id
+resourceRouter.post('/category/:id', category.post)
 
 
 
 // /api/login
-apiRouter.post('/login', api.login)
+apiRouter.post('/login', login.auth)
 
 
 

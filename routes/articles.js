@@ -3,25 +3,23 @@ const
 	path = require('path')
 	marked = require('marked'),
 	moment = require('moment'),
-	co = require('co')
-
+	co = require('co'),
 	Cache = require('../module/cache')(),
-	db = require('../module/db')
+	db = require('../module/db'),
+	log = require('../module/log')
 
+const imgPath = '/upload/articles/'
 
-
-let articles = {}
 
 
 
 // save img 
-const saveImg = imgObj => {
+function saveImg (imgObj) {
 	return new Promise((resolve, reject) => {
 		fs.writeFile(
 				path.resolve(__dirname, '../public/upload/articles/', imgObj.name),
 				new Buffer(imgObj.ctn.replace(/^data:image\/\w+;base64,/, ''), 'base64'),
 				err => {
-					console.log(err)
 					if (err) {reject({type: 'saveImg error', err:err})}
 					else {resolve()}
 				}
@@ -31,8 +29,9 @@ const saveImg = imgObj => {
 
 
 
+
 // get all articles
-articles.get = (req, res) => {
+module.exports.get = (req, res) => {
 	let cache = Cache.find('articles'),
 		filter = req.query.filter || 'all',
 		temp = []
@@ -42,7 +41,7 @@ articles.get = (req, res) => {
 	}
 	else {
 		cache.forEach((element, index) => {
-			element.classes.name == filter && temp.push(element)
+			element.category.name == filter && temp.push(element)
 		})
 	}
 
@@ -54,8 +53,9 @@ articles.get = (req, res) => {
 
 
 
+
 // get one article by id
-articles.getOne = (req, res) => {
+module.exports.getOne = (req, res) => {
 	let id = req.params.id
 
 	res.end(JSON.stringify({
@@ -66,93 +66,100 @@ articles.getOne = (req, res) => {
 
 
 
-// upload one article by id
-articles.post = (req, res) => {
-	let id = Number(req.params.id),
-		data = JSON.parse(req.body.data),
-		task = [],
-		imgObj = Object.assign({}, data.article.bg) 
 
-	// pre-process data
-	delete data.article._id // delete existing '_id' field because mongoDB not support update '_id' field 
-	delete data.article.timestamp  // not update 'timestamp', 'date', '_index' field
-	delete data.article.date
-	delete data.article._index
+/**
+ * post
+ *
+ * @describe		update article
+ *
+*/
+module.exports.post = (req, res) => {
+	const
+		id = Number(req.params.id),
+		formData = req.body.data,
+		ctrl = req.body.ctrl,
+		task = []
 
-	data.article.html = marked(data.article.markdown)
-	data.article.bg.ctn = '/upload/articles/' + data.article.bg.name
+	// format data
+	formData.html = marked(formData.markdown)
+	formData.lastChangeDate = moment(Date.now()).format('YYYY-MM-DD HH:hh')
 
-	task.push(db.update('articles', {id: id}, {$set: data.article}))
+	// check has change background image
+	if (ctrl.isChangeBg) {
+		let copyBg = Object.assign({}, formData.bg)
 
-	if (data.changeBg) {
-		task.push(saveImg(imgObj))
+		formData.bg.ctn = imgPath + formData.bg.name
+		task.push( db.update('articles', {id: id}, {$set: formData}) )
+		task.push( saveImg(copyBg) )
+	} else {
+		delete formData.bg
+		task.push( db.update('articles', {id: id}, {$set: formData}) )
 	}
 
-	if (data.changeClasses) {
-		task.push(db.update('classes', {id: data.article.classes}, {$push: {articles: id}}))
-		task.push(db.update('classes', {id: data.oldClasses}, {$pull: {articles: id}}))
+	// check has change category
+	if (ctrl.isChangeCategory) {
+		task.push(db.update('category', {id: formData.category}, {$push: {articles: id}}))
+		task.push(db.update('classes', {id: ctrl.oldCategory}, {$pull: {articles: id}}))
 	}
 
-	co(function *(){
-		let results = yield task
-
-		if (results[0].result.n) {
-			Cache.reload()
-
-			res.end(JSON.stringify({
-				code: 0
-			}))
-		}
-	}).catch(err => {
-		res.end(JSON.stringify(err))
-	})
-}
-
-
-
-// create new article
-articles.put = (req, res) => {
-	let data = JSON.parse(req.body.data)
-
-	// save background image
-	saveImg(data.bg).then(() => {
-		// success
-		// pre-process for insert article
-		data.bg.ctn = '/upload/articles/' + data.bg.name
-		data.html = marked(data.markdown)
-		data.date = moment(Number(data.timestamp)).format('YYYY-MM-DD HH:hh')
-
-		// insert article
-		return db.insert('articles', data)
-	}).then(r => {
-		let ok = r.result.n
-
-		data = r.ops[0]
-
-		if (!ok) {throw {code: 1, type: 'insertError', msg: '0 data is inserted at articles'}}
-			
-		// insert article id to classes
-		return db.update('classes', {id: data.classes}, {$push: {articles: data.id}})
-	}).then(r => {
-		if (!r.result.n) {throw {code: 1, type: 'updateError', msg: '0 data is updated at classes'}}
-
+	Promise.all(task).then(r => {
 		Cache.reload()
-
-		res.end(JSON.stringify({
-			code: 0,
-			result: data
-		}))
-
-		console.log(333)
-
+		log.success(res)
 	}).catch(err => {
-		res.end(JSON.stringify(err))
+		log.error(res, {err: err})
 	})
 }
+
+
+
+
+
+/**
+ * put
+ *
+ * @describe		create a new article
+ *
+*/
+module.exports.put = (req, res) => {
+	const formData = req.body
+	const task = []
+
+	// format data
+	formData.html = marked(formData.markdown)
+	formData.date = moment(Date.now()).format('YYYY-MM-DD HH:hh')
+	formData.lastChangeDate = moment(Date.now()).format('YYYY-MM-DD HH:hh')
+
+	// check background image
+	if (formData.bg) {
+		task.push(saveImg(Object.assign({}, formData.bg)))
+		formData.bg.ctn = imgPath + formData.bg.name
+	}
+
+	// save img and insert Data to DB
+	task.push(db.insert('articles', formData))
+	Promise.all(task).then(r => {
+		const articleData = r.length === 2
+			? r[1]['ops'][0]
+			: r[0]['ops'][0]
+
+		// 关联文章
+		db.update('classes', {id: formData.category}, {$push: {articles: articleData.id}}).then(r => {
+			Cache.reload()
+			log.success(res, {result: articleData})
+		}).then(err => {
+			log.error(res, {err: err})
+		})
+	}).catch(err => {
+		log.error(res, {err: err})
+	})
+}
+
+
+
 
 
 // delete one article by id
-articles.delete = (req, res) => {
+module.exports.delete = (req, res) => {
 	let articleId = Number(req.params.id),
 		classesId = JSON.parse(req.body.data).classes
 
@@ -167,7 +174,3 @@ articles.delete = (req, res) => {
 		res.end(JSON.stringify(err))
 	})
 }
-
-
-
-module.exports = articles
