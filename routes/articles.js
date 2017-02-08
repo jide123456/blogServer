@@ -4,11 +4,24 @@ const
 	marked = require('marked'),
 	moment = require('moment'),
 	co = require('co'),
+	pinyin = require('pinyin'),
+	highlightAuto = require('../module/highlight').highlightAuto
 	Cache = require('../module/cache')(),
 	db = require('../module/db'),
 	log = require('../module/log')
 
 const imgPath = '/upload/articles/'
+const renderer = new marked.Renderer()
+
+
+
+
+// set marked
+marked.setOptions({highlight: code => highlightAuto(code).value})
+renderer.heading = (text, level) => {
+	const _pinyin = pinyin(text, {style: pinyin.STYLE_TONE2}).join('')
+	return `<h${level} id="${_pinyin}" class="j-heading">${text}</h${level}>` 
+}
 
 
 
@@ -81,7 +94,7 @@ module.exports.post = (req, res) => {
 		task = []
 
 	// format data
-	formData.html = marked(formData.markdown)
+	formData.html = marked(formData.markdown, {renderer: renderer})
 	formData.lastChangeDate = moment(Date.now()).format('YYYY-MM-DD HH:hh')
 
 	// check has change background image
@@ -125,7 +138,7 @@ module.exports.put = (req, res) => {
 	const task = []
 
 	// format data
-	formData.html = marked(formData.markdown)
+	formData.html = marked(formData.markdown, {renderer: renderer})
 	formData.date = moment(Date.now()).format('YYYY-MM-DD HH:hh')
 	formData.lastChangeDate = moment(Date.now()).format('YYYY-MM-DD HH:hh')
 
