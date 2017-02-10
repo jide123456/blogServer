@@ -35,7 +35,7 @@ app.use(session({
     secret: 'this is my secret and fuck you all', 
     saveUninitialized: false, 
     resave: false,
-    cookie: {httpOnly: true}
+    cookie: {httpOnly: true, maxAge: 3600000}
 }))
 
 // development Access-Control-Allow-Origin

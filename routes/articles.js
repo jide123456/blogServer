@@ -111,14 +111,15 @@ module.exports.post = (req, res) => {
 
 	// check has change category
 	if (ctrl.isChangeCategory) {
-		task.push(db.update('category', {id: formData.category}, {$push: {articles: id}}))
-		task.push(db.update('classes', {id: ctrl.oldCategory}, {$pull: {articles: id}}))
+		task.push(db.update('category', {id: Number(formData.category)}, {$push: {articles: id}}))
+		task.push(db.update('category', {id: Number(ctrl.oldCategory)}, {$pull: {articles: id}}))
 	}
 
 	Promise.all(task).then(r => {
 		Cache.reload()
 		log.success(res)
 	}).catch(err => {
+		console.log(err)
 		log.error(res, {err: err})
 	})
 }
@@ -156,7 +157,7 @@ module.exports.put = (req, res) => {
 			: r[0]['ops'][0]
 
 		// 关联文章
-		db.update('classes', {id: formData.category}, {$push: {articles: articleData.id}}).then(r => {
+		db.update('category', {id: Number(formData.category)}, {$push: {articles: Number(articleData.id)}}).then(r => {
 			Cache.reload()
 			log.success(res, {result: articleData})
 		}).then(err => {
@@ -173,17 +174,18 @@ module.exports.put = (req, res) => {
 
 // delete one article by id
 module.exports.delete = (req, res) => {
-	let articleId = Number(req.params.id),
-		classesId = JSON.parse(req.body.data).classes
+	const
+		articleId = Number(req.params.id),
+		caregoryId = Number(req.body.category)
 
 	co(function *(){
 		yield db.delete('articles', {id: articleId})
-		yield db.update('classes', {id: classesId}, {$pull: {articles: articleId}})
+		yield db.update('category', {id: caregoryId}, {$pull: {articles: articleId}})
 
 		Cache.reload()
-
-		res.end(JSON.stringify({code: 0}))
+		log.success(res)
 	}).catch(err => {
-		res.end(JSON.stringify(err))
+		console.log(err)
+		log.error(res, {err: err})
 	})
 }

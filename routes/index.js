@@ -66,12 +66,12 @@ resourceRouter.put('/category', category.put)
 // /resource/category/:id
 resourceRouter.post('/category/:id', category.post)
 
+resourceRouter.get('/user', login.getUser)
 
 
 // /api/login
 apiRouter.post('/login', login.auth)
-
-
+apiRouter.get('/logout', login.logout)
 
 module.exports = {
 	resource: resourceRouter,

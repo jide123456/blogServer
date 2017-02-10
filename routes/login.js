@@ -1,5 +1,6 @@
 const 
 	db = require('../module/db')
+	log = require('../module/log')
 
 
 
@@ -7,16 +8,21 @@ const
 module.exports.auth = (req, res) => {
 	db.find('users', req.body).then(data => {
 		if (data.length === 0) {
-			res.end(JSON.stringify({
-				code: 1,
-				msg: 'Incorrect username or password.' 
-			}))
+			log.warning(res, {msg: '错误的账号或密码'})
 		} else {
 			req.session.user = data[0].user
-
-			res.end(JSON.stringify({code: 0}))
+			log.success(res, {user: data[0].user})
 		}
 	}).then(err => {
-		res.end(JSON.stringify(err))
+		log.error(res, {err: err})
 	})
+}
+
+module.exports.getUser = (req, res) => {
+	log.success(res, {user: req.session.user || null})
+}
+
+module.exports.logout = (req, res) => {
+	req.session.user = null
+	log.success(res)
 }
