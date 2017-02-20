@@ -1,48 +1,40 @@
 const
 	Cache = require('../module/cache')(),
 	db = require('../module/db')
+	log = require('../module/log')
 
 
 
 
 
-// get all classes
+// get all category
 module.exports.get = (req, res) => {
-	res.end(JSON.stringify({
-		code: 0,
-		category: Cache.find('category')
-	}))
+	log.success(res, {category: Cache.find('category')})
 }
 
 
 
 
-// update one classes by id
+// update one category by id
 module.exports.post = (req, res) => {
 	const
 		id = Number(req.params.id),
 		insertData = req.body
 
-	db.DB.collection('classes').findOneAndUpdate(
+	db.DB.collection('category').findOneAndUpdate(
 		{ id: Number(req.params.id) },
 		{ $set: insertData },
 		{ returnOriginal: false },
 		( err, result ) => {
 			if (err) {
-				res.end(JSON.stringify({
-					code: -1,
-					err: err
-				}))
+				log.error(res, {err: err})
 				return
 			}
 
 			if (result.lastErrorObject.n) {
 				Cache.reload()
 
-				res.end(JSON.stringify({
-					code: 0,
-					result: result.value
-				}))
+				log.success(res, {result: result.value})
 			}
 		}
 	)
@@ -51,14 +43,14 @@ module.exports.post = (req, res) => {
 
 
 
-// create new classes
+// create new category
 module.exports.put = (req, res) => {
 	const insertData = {
 		name: req.body.name,
 		articles: []
 	}
 
-	db.insert('classes', insertData).then(result => {
+	db.insert('category', insertData).then(result => {
 		const
 			ok = result.result.n,
 			data = result.ops[0]
@@ -66,16 +58,9 @@ module.exports.put = (req, res) => {
 		if (ok) {
 			Cache.reload()
 
-			res.end(JSON.stringify({
-				code: 0,
-				result: data
-			}))
+			log.success(res, {result: data})
 		}
 	}).then(err => {
-		res.end(JSON.stringify({
-			code: -1,
-			err: err,
-			errorMsg: 'insertOne error'
-		}))
+		log.error(res, {err: err})
 	})
 }

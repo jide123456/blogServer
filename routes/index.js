@@ -14,20 +14,6 @@ const
 
 
 
-// url                      type        description                       require Login
-
-// /resource/articles        get         get all article                  false
-// /resource/articles        put         create new article               true
-// /resource/articles/13     get         get one article by id            false
-// /resource/articles/13     post        update one article by id         true
-// /resource/articles/13     delete      delete one article by id         true
-
-// /resource/category         get         get all category                  false
-// /resource/category         put         create new class                 true
-// /resource/category/13      post        update class by id               true
-// /resource/category/13      delete      delete class by id               true
-
-// /login                    post        login
 
 resourceRouter.use((req, res, next) => {
 	let method = req.method,
@@ -35,7 +21,7 @@ resourceRouter.use((req, res, next) => {
 
 	// verify permissions
 	if (process.env.NODE_ENV === 'production') {
-		if (method == 'POST' || method == 'PUT' || method == 'DELETE') {
+		if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
 			if (!user) {
 				res.end(JSON.stringify({
 					code: 40001,
@@ -43,11 +29,16 @@ resourceRouter.use((req, res, next) => {
 				}), 'utf8')
 
 				return
+			} else {
+				next()
 			}
+		} else {
+			next()
 		}
+	} else {
+		next()
 	}
 
-	next()
 })
 
 // /resource/article

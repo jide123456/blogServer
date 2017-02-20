@@ -1,22 +1,25 @@
 const
-	fs = require('fs'),
-	path = require('path')
-	marked = require('marked'),
-	moment = require('moment'),
-	co = require('co'),
-	pinyin = require('pinyin'),
-	highlightAuto = require('../module/highlight').highlightAuto
-	Cache = require('../module/cache')(),
-	db = require('../module/db'),
-	log = require('../module/log')
+    fs = require('fs'),
+    path = require('path'),
+    marked = require('marked'),
+    moment = require('moment'),
+    co = require('co'),
+    pinyin = require('pinyin'),
+    UpYun = require('upyun'),
+    
+    highlightAuto = require('../module/highlight').highlightAuto,
+    Cache = require('../module/cache')(),
+    db = require('../module/db'),
+    log = require('../module/log')
 
-const imgPath = '/upload/articles/'
-const renderer = new marked.Renderer()
+const imgLocalPath = '/upload/articles/'
 
 
 
 
 // set marked
+const renderer = new marked.Renderer()
+
 marked.setOptions({highlight: code => highlightAuto(code).value})
 renderer.heading = (text, level) => {
 	const _pinyin = pinyin(text, {style: pinyin.STYLE_TONE2}).join('')
@@ -25,18 +28,41 @@ renderer.heading = (text, level) => {
 
 
 
+// set upyun
+let config, upyun
+
+try {
+	config = require('../config')
+	upyun = new UpYun(config.upyun.bucket, config.upyun.user, config.upyun.pwd, 'v0.api.upyun.com', {
+		apiVersion: 'v2',
+		secret: 'yoursecret'
+	})
+} catch (err) {}
+
+
+
 
 // save img 
 function saveImg (imgObj) {
+	const img = path.resolve(__dirname, '../public/upload/articles/', imgObj.name)
+	const base64 = imgObj.base64.replace(/^data:image\/\w+;base64,/, '')
+
 	return new Promise((resolve, reject) => {
-		fs.writeFile(
-				path.resolve(__dirname, '../public/upload/articles/', imgObj.name),
-				new Buffer(imgObj.ctn.replace(/^data:image\/\w+;base64,/, ''), 'base64'),
-				err => {
-					if (err) {reject({type: 'saveImg error', err:err})}
-					else {resolve()}
-				}
-			)
+		fs.writeFile(img, new Buffer(base64, 'base64'), err => {
+			err && reject({type: 'saveImg error', err: err})
+
+			if (process.env.NODE_ENV === 'production') {
+				upyun.putFile(config.upyun.remotePath + imgObj.name, img, null, true, {}, (err, result) => {
+					err
+						? reject(err)
+						: result.statusCode === 200
+							? resolve(result)
+							: reject({type: 'saveImg error', msg: 'saveImg error to cdn'})
+				})
+			} else {
+				resolve()
+			}
+		})
 	})
 }
 
@@ -51,17 +77,13 @@ module.exports.get = (req, res) => {
 
 	if (filter == 'all') {
 		temp = cache
-	}
-	else {
+	} else {
 		cache.forEach((element, index) => {
 			element.category.name == filter && temp.push(element)
 		})
 	}
 
-	res.end(JSON.stringify({
-		code: 0,
-		articles: temp
-	}))
+	log.success(res, {articles: temp})
 }
 
 
@@ -71,10 +93,7 @@ module.exports.get = (req, res) => {
 module.exports.getOne = (req, res) => {
 	let id = req.params.id
 
-	res.end(JSON.stringify({
-		code: 0,
-		article: Cache.findOne('articles', id) || null
-	}))
+	log.success(res, {article: Cache.findOne('articles', id) || null})
 }
 
 
@@ -95,13 +114,16 @@ module.exports.post = (req, res) => {
 
 	// format data
 	formData.html = marked(formData.markdown, {renderer: renderer})
-	formData.lastChangeDate = moment(Date.now()).format('YYYY-MM-DD HH:hh')
+	formData.lastChangeDate = moment().format('YYYY-MM-DD HH:mm')
 
 	// check has change background image
-	if (ctrl.isChangeBg) {
+	if (ctrl.isChangeBg === 'true') {
 		let copyBg = Object.assign({}, formData.bg)
 
-		formData.bg.ctn = imgPath + formData.bg.name
+		formData.bg.localPath = imgLocalPath + formData.bg.name
+		formData.bg.cdnPath = config.upyun.cdnPath + formData.bg.name
+		delete formData.bg.base64
+
 		task.push( db.update('articles', {id: id}, {$set: formData}) )
 		task.push( saveImg(copyBg) )
 	} else {
@@ -110,7 +132,7 @@ module.exports.post = (req, res) => {
 	}
 
 	// check has change category
-	if (ctrl.isChangeCategory) {
+	if (ctrl.isChangeCategory === 'true') {
 		task.push(db.update('category', {id: Number(formData.category)}, {$push: {articles: id}}))
 		task.push(db.update('category', {id: Number(ctrl.oldCategory)}, {$pull: {articles: id}}))
 	}
@@ -119,7 +141,6 @@ module.exports.post = (req, res) => {
 		Cache.reload()
 		log.success(res)
 	}).catch(err => {
-		console.log(err)
 		log.error(res, {err: err})
 	})
 }
@@ -140,13 +161,16 @@ module.exports.put = (req, res) => {
 
 	// format data
 	formData.html = marked(formData.markdown, {renderer: renderer})
-	formData.date = moment(Date.now()).format('YYYY-MM-DD HH:hh')
-	formData.lastChangeDate = moment(Date.now()).format('YYYY-MM-DD HH:hh')
+	formData.date = moment().format('YYYY-MM-DD HH:mm')
+	formData.lastChangeDate = moment().format('YYYY-MM-DD HH:mm')
 
 	// check background image
 	if (formData.bg) {
 		task.push(saveImg(Object.assign({}, formData.bg)))
-		formData.bg.ctn = imgPath + formData.bg.name
+
+		formData.bg.localPath = imgLocalPath + formData.bg.name
+		formData.bg.cdnPath = config.upyun.cdnPath + formData.bg.name
+		delete formData.bg.base64
 	}
 
 	// save img and insert Data to DB
@@ -160,7 +184,7 @@ module.exports.put = (req, res) => {
 		db.update('category', {id: Number(formData.category)}, {$push: {articles: Number(articleData.id)}}).then(r => {
 			Cache.reload()
 			log.success(res, {result: articleData})
-		}).then(err => {
+		}, err => {
 			log.error(res, {err: err})
 		})
 	}).catch(err => {
@@ -185,7 +209,6 @@ module.exports.delete = (req, res) => {
 		Cache.reload()
 		log.success(res)
 	}).catch(err => {
-		console.log(err)
 		log.error(res, {err: err})
 	})
 }
